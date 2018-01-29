@@ -63,10 +63,6 @@
 
 	var _react2 = _interopRequireDefault(_react);
 
-	var _Hello = __webpack_require__(161);
-
-	var _Hello2 = _interopRequireDefault(_Hello);
-
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -74,6 +70,19 @@
 	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
 
 	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+	String.prototype.hashCode = function () {
+	  var hash = 0;
+	  if (this.length == 0) {
+	    return hash;
+	  }
+	  for (var i = 0; i < this.length; i++) {
+	    var char = this.charCodeAt(i);
+	    hash = (hash << 5) - hash + char;
+	    hash = hash & hash; // Convert to 32bit integer
+	  }
+	  return hash;
+	};
 
 	var Messages = function (_React$Component) {
 	  _inherits(Messages, _React$Component);
@@ -88,7 +97,7 @@
 	    socket.on('chat message', function (data) {
 	      //console.log(data['value']);
 	      var msg = data['value'];
-	      var room = data['room'];
+	      var room = data['room'][data['user']];
 	      _this.setState(function (prevs, props) {
 	        if (room in prevs) {
 	          prevs[room].push(msg);
@@ -133,7 +142,7 @@
 
 	            return _react2.default.createElement(
 	              'div',
-	              { className: 'col-md-4' },
+	              { className: 'col-md-4', key: key },
 	              _react2.default.createElement(
 	                'div',
 	                { className: 'portlet portlet-default' },
@@ -147,8 +156,7 @@
 	                      'h4',
 	                      null,
 	                      _react2.default.createElement('i', { className: 'fa fa-circle text-green' }),
-	                      ' ',
-	                      key
+	                      ' '
 	                    )
 	                  ),
 	                  _react2.default.createElement('div', { className: 'clearfix' })
@@ -219,19 +227,34 @@
 
 	    var _this3 = _possibleConstructorReturn(this, (NameForm.__proto__ || Object.getPrototypeOf(NameForm)).call(this, props));
 
-	    _this3.state = { value: '', name: '', room: '', registered: false, rooms: [] };
+	    _this3.state = { value: '', name: '', user: '', room: {}, registered: false, rooms: [] };
 
 	    _this3.handleChange = _this3.handleChange.bind(_this3);
 	    _this3.handleSubmit = _this3.handleSubmit.bind(_this3);
-	    socket.on('room-update', function (room) {
-	      if (!_this3.state.rooms.includes(room)) {
-	        _this3.state.rooms.push(room);
+	    socket.on('room-update', function (user) {
+	      if (!_this3.state.rooms.includes(user)) {
+	        _this3.state.rooms.push(user);
+	      }
+	    });
+	    socket.on('room-leave', function (user) {
+	      if (_this3.state.rooms.invludes(user)) {
+	        var index = _this3.state.rooms.includes.indexOf(user);
+	        _this3.state.rooms.splice(index, 1);
 	      }
 	    });
 	    socket.emit('new-user');
 	    socket.on('get-room', function () {
-	      if (_this3.state.room != '') {
+	      if (_this3.state.rooms.length != 0) {
 	        socket.emit('join', _this3.state);
+	      }
+	    });
+	    socket.on('are-you', function (data) {
+	      if (_this3.state.name == data.user) {
+	        socket.emit('join-room', data.to_join);
+	        _this3.setState(function (prevs) {
+	          prevs.room[data.m_from] = data.to_join;
+	          return prevs;
+	        });
 	      }
 	    });
 
@@ -242,7 +265,7 @@
 	  _createClass(NameForm, [{
 	    key: 'handleChange',
 	    value: function handleChange(event) {
-	      if (event.target.name == "msg") this.setState({ value: event.target.value });else if (event.target.name == "name") this.setState({ name: event.target.value });else this.setState({ room: event.target.value });
+	      if (event.target.name == "msg") this.setState({ value: event.target.value });else if (event.target.name == "name") this.setState({ name: event.target.value });else this.setState({ user: event.target.value });
 	    }
 	  }, {
 	    key: 'handleSubmit',
@@ -251,9 +274,9 @@
 
 	      event.preventDefault();
 	      if (this.state.registered == false) {
-	        if (this.state.value == "" && this.state.name != "" && this.state.room == "") {
+	        if (this.state.value == "" && this.state.name != "" && this.state.user == "") {
 	          this.setState(function (prevs) {
-	            prevs.room = prevs.name;
+	            //prevs.room = prevs.name;
 	            prevs.rooms.push(prevs.name);
 	            prevs.registered = true;
 	            return prevs;
@@ -270,11 +293,18 @@
 	        console.log(this.state.value);
 	        this.setState(function (prevs) {
 	          prevs.value = prevs.name + ": " + prevs.value;
+	          if (!(prevs.user in prevs.room)) {
+	            prevs.room[prevs.user] = Math.floor(Math.random() * 1000);
+	          }
+
 	          return prevs;
 	        }, function () {
-	          socket.emit('join', _this4.state);
-	          socket.emit('chat message', _this4.state);
-	          _this4.setState({ value: "" });
+
+	          socket.emit('join-chat', _this4.state);
+	          window.setTimeout(function () {
+	            socket.emit('chat message', _this4.state);
+	            _this4.setState({ value: '' });
+	          }, 200);
 	        });
 	      }
 	      /*else if (this.state.name != ""){
@@ -297,6 +327,8 @@
 	  }, {
 	    key: 'render',
 	    value: function render() {
+	      var _this5 = this;
+
 	      return _react2.default.createElement(
 	        'div',
 	        null,
@@ -321,9 +353,17 @@
 	            'Room:',
 	            _react2.default.createElement(
 	              'select',
-	              { value: this.state.room, onChange: this.handleChange },
-	              _react2.default.createElement('option', null),
-	              this.state.rooms.map(function (room, key) {
+	              { value: this.state.user, onChange: this.handleChange },
+	              _react2.default.createElement(
+	                'option',
+	                { hidden: true },
+	                ' '
+	              ),
+	              this.state.rooms.filter(function (x) {
+	                if (_this5.state.registered == true && x == _this5.state.name) {
+	                  return false;
+	                }return true;
+	              }).map(function (room, key) {
 	                return _react2.default.createElement(
 	                  'option',
 	                  { value: room, key: key },
@@ -20228,35 +20268,6 @@
 
 	module.exports = deprecated;
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
-
-/***/ }),
-/* 161 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	Object.defineProperty(exports, "__esModule", {
-	  value: true
-	});
-
-	var _react = __webpack_require__(149);
-
-	var _react2 = _interopRequireDefault(_react);
-
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-	var Hello = _react2.default.createClass({
-	  displayName: 'Hello',
-	  render: function render() {
-	    return _react2.default.createElement(
-	      'h1',
-	      null,
-	      'Hello, world'
-	    );
-	  }
-	});
-
-	exports.default = Hello;
 
 /***/ })
 /******/ ]);

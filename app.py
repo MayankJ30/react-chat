@@ -5,7 +5,7 @@ from flask_socketio import SocketIO, emit, send, join_room, leave_room
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 app.secret_key = 'A0Zr98j/3yX R~XHH!jmN]LWX/,?RT'
-socketio = SocketIO(app, manage_session=False)
+socketio = SocketIO(app, manage_session=False, ping_timeout = 3, ping_interval = 2)
 
 @app.route('/')
 def hello():
@@ -13,13 +13,29 @@ def hello():
     resp = make_response(render_template('index.html'))
     return resp
 
+@socketio.on('connect' )
+def test_connect():
+    id = request.sid
+    print("Connected: %s" % (id))
+    sys.stdout.flush()
+    @socketio.on('disconnect')
+    def test_disconnect():
+        print('Client disconnected')
+        sys.stdout.flush()
+
+
+
+
+
+    emit('my response', {'data': 'Connected'})
 
 
 
 @socketio.on('chat message')
 def handle_message(data):
     #send( data['message'], room = data['room'])
-    room = data['room']
+    room = data['room'][data['user']]
+    print(data)
     #print('received message: ' + data['value'])
     #print('room: ' + data['room'])
     #msgs = session[room]
@@ -34,20 +50,40 @@ def handle_message(data):
 @socketio.on('join')
 def on_join(data):
     #username = data['username']
-    room = data['room']
-    join_room(room)
-    print("room: " + room)
+    user = data['name']
+    #join_room(room)
+    print("user: " + user)
     #session[room]= []
     sys.stdout.flush()
-    emit('room-update', room, broadcast=True);
+    emit('room-update', user, broadcast=True);
     #send('entered the room.', room=room)
+
+
+@socketio.on('join-chat')
+def on_join_chat(data):
+    print(data)
+    sys.stdout.flush()
+    room = (data['room'][data['user']])
+    join_room(room)
+
+    emit('are-you', {'m_from': data['name'] , 'user': data['user'] , 'to_join' :room} , broadcast=True)
+
+@socketio.on('join-room')
+def on_join_room(data):
+    print(data)
+    print('-------------------------------------------------')
+    sys.stdout.flush();
+    join_room(data);
 
 @socketio.on('leave')
 def on_leave(data):
     #username = data['username']
-    room = data['room']
-    leave_room(room)
-    send(' left the room.', room=room)
+    rooms = data['room']
+    for key in rooms:
+        leave_room(rooms[key])
+    print(' left rooms.')
+    sys.stdout.flush()
+    emit('room-leave', data['user'], broadcast=True)
 
 
 @socketio.on('new-user')

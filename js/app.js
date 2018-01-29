@@ -1,6 +1,20 @@
 import ReactDOM from 'react-dom';
 import React from 'react';
-import Hello from './Hello';
+
+
+String.prototype.hashCode = function() {
+    var hash = 0;
+    if (this.length == 0) {
+        return hash;
+    }
+    for (var i = 0; i < this.length; i++) {
+       var char = this.charCodeAt(i);
+        hash = ((hash<<5)-hash)+char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash;
+}
+
 
 class Messages extends React.Component {
   constructor(props) {
@@ -10,7 +24,7 @@ class Messages extends React.Component {
     socket.on('chat message', (data) =>{
       //console.log(data['value']);
       var msg = data['value'];
-      var room = data['room'];
+      var room = data['room'][data['user']];
       this.setState((prevs, props) => {
         if(room in prevs){
             prevs[room].push(msg);
@@ -44,11 +58,11 @@ class Messages extends React.Component {
         { Object.keys(this.state).filter(function(x) { return x !== 'username'; }).map((key) => {
 
           return (
-                <div className="col-md-4">
+                <div className="col-md-4" key={key}>
                   <div className="portlet portlet-default">
                     <div className="portlet-heading">
                       <div className="portlet-title">
-                        <h4><i className="fa fa-circle text-green"></i> {key}</h4>
+                        <h4><i className="fa fa-circle text-green"></i> </h4>
                       </div>
                       <div className="clearfix"></div>
                     </div>
@@ -87,22 +101,37 @@ class Messages extends React.Component {
 class NameForm extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {value: '', name: '' , room: '', registered : false,  rooms: []};
+    this.state = {value: '', name: '' , user: '' , room: {}, registered : false,  rooms: []};
 
     this.handleChange = this.handleChange.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
-    socket.on('room-update' , (room) => {
-      if (!this.state.rooms.includes(room)) {
-        this.state.rooms.push(room);
+    socket.on('room-update' , (user) => {
+      if (!this.state.rooms.includes(user)) {
+        this.state.rooms.push(user);
       }
     });
+    socket.on('room-leave', (user) => {
+      if(this.state.rooms.invludes(user)) {
+        var index = this.state.rooms.includes.indexOf(user)
+        this.state.rooms.splice(index, 1)
+      }
+    })
     socket.emit('new-user');
     socket.on('get-room', () => {
-      if(this.state.room != '') {
+      if(this.state.rooms.length != 0) {
         socket.emit('join', this.state)
 
       }
     })
+    socket.on('are-you' ,(data) => {
+      if(this.state.name == data.user) {
+        socket.emit('join-room', data.to_join);
+        this.setState((prevs) =>
+          {prevs.room[data.m_from] = data.to_join
+          return prevs;})
+      }
+    })
+
 
     console.log(io);
   }
@@ -113,15 +142,15 @@ class NameForm extends React.Component {
     else if(event.target.name == "name")
       this.setState({name: event.target.value});
     else
-      this.setState({room: event.target.value});
+      this.setState({user: event.target.value});
   }
 
   handleSubmit(event) {
     event.preventDefault();
     if(this.state.registered == false) {
-      if(this.state.value == "" && this.state.name != "" && this.state.room == "") {
+      if(this.state.value == "" && this.state.name != "" && this.state.user == "") {
         this.setState((prevs) => {
-          prevs.room = prevs.name;
+          //prevs.room = prevs.name;
           prevs.rooms.push(prevs.name);
           prevs.registered = true;
           return prevs;
@@ -141,11 +170,19 @@ class NameForm extends React.Component {
       console.log(this.state.value);
       this.setState((prevs) => {
         prevs.value = prevs.name + ": " + prevs.value;
+        if(!(prevs.user in prevs.room)) {
+            prevs.room[prevs.user] = Math.floor(Math.random()*1000) ;
+        }
+
         return prevs;
       }, () => {
-        socket.emit('join', this.state);
-        socket.emit('chat message', this.state);
-        this.setState({value: ""});
+
+        socket.emit('join-chat', this.state)
+        window.setTimeout(() => {
+          socket.emit('chat message', this.state);
+          this.setState({value: ''})
+        }, 200);
+
 
       })
     }
@@ -184,9 +221,9 @@ class NameForm extends React.Component {
         </label>
         <label>
         Room:
-        <select value = {this.state.room} onChange = {this.handleChange}>
-          <option></option>
-          {this.state.rooms.map(function(room, key) {
+        <select value = {this.state.user} onChange = {this.handleChange}>
+          <option hidden> </option>
+          {this.state.rooms.filter((x) => {if(this.state.registered == true && x == this.state.name) {return false;} return true;}).map(function(room, key) {
             return <option value={room} key = {key}> {room} </option>;
           })}
         </select>
