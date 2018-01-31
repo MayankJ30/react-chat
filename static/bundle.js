@@ -71,19 +71,6 @@
 
 	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
 
-	String.prototype.hashCode = function () {
-	  var hash = 0;
-	  if (this.length == 0) {
-	    return hash;
-	  }
-	  for (var i = 0; i < this.length; i++) {
-	    var char = this.charCodeAt(i);
-	    hash = (hash << 5) - hash + char;
-	    hash = hash & hash; // Convert to 32bit integer
-	  }
-	  return hash;
-	};
-
 	var Messages = function (_React$Component) {
 	  _inherits(Messages, _React$Component);
 
@@ -92,32 +79,59 @@
 
 	    var _this = _possibleConstructorReturn(this, (Messages.__proto__ || Object.getPrototypeOf(Messages)).call(this, props));
 
-	    _this.state = {};
-	    _this.state['username'] = _this.props.value;
+	    _this.state = { inputs: {}, keys: {} };
+	    _this.state['username'] = _this.props.value.name;
+	    _this.onClick = _this.onClick.bind(_this);
+	    _this.onKeyPress = _this.onKeyPress.bind(_this);
+	    _this.onChange = _this.onChange.bind(_this);
+	    _this.callCallback = _this.callCallback.bind(_this);
+
 	    socket.on('chat message', function (data) {
-	      //console.log(data['value']);
+	      console.log(data);
 	      var msg = data['value'];
 	      var room = data['room'][data['user']];
 	      _this.setState(function (prevs, props) {
 	        if (room in prevs) {
 	          prevs[room].push(msg);
-	          Cookies.set('name', JSON.stringify(prevs));
-	          return prevs;
 	        } else {
 	          //console.log(room)
 	          prevs[room] = [];
 	          prevs[room].push(msg);
 	          //console.log(prevs[room])
-	          Cookies.set('name', JSON.stringify(prevs));
-	          return prevs;
 	        }
+	        return prevs;
 	      });
+	      var obj = { m_data: _this.state, s_data: _this.props.value };
+	      Cookies.set(_this.state['username'], JSON.stringify(obj));
+
+	      $("div[id='" + data['room'][data['user']] + "']").fadeIn();
+	      document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+	      //  $('div.chat-widget').animate({ scrollTop: $(document).height() }, "slow");
 	    });
-	    if (Cookies.get('name')) {
-	      var cookie = JSON.parse(Cookies.get('name'));
-	      if (cookie['username'] == _this.state['username']) {
-	        for (var room in cookie) {
-	          _this.state[room] = cookie[room];
+
+	    if (Cookies.get(_this.state['username'])) {
+	      var cookie = JSON.parse(Cookies.get(_this.state['username']));
+	      console.log(cookie);
+
+	      if (cookie.m_data['username'] == _this.state['username']) {
+	        var room_key_list = Object.keys(cookie.m_data).filter(function (x) {
+	          return x !== 'username' && x != 'inputs' && x != 'keys';
+	        });
+	        for (var index in room_key_list) {
+	          console.log(_this.props.value.rooms);
+	          var room_key = room_key_list[index];
+	          var user = "";
+	          for (var t_user in cookie.s_data.room) {
+	            console.log("try:" + t_user);
+	            console.log(room_key);
+	            if (cookie.s_data.room[t_user] == room_key) {
+	              console.log("Match: " + user);
+	              user = t_user;
+	              break;
+	            }
+	          }
+	          console.log(user);
+	          if (_this.props.value.rooms.hasOwnProperty(user)) _this.state[room_key] = cookie.m_data[room_key];
 	        }
 	      }
 	    }
@@ -126,6 +140,67 @@
 	  }
 
 	  _createClass(Messages, [{
+	    key: 'callCallback',
+	    value: function callCallback(data) {
+	      this.props.callback(data);
+	    }
+	  }, {
+	    key: 'componentDidMount',
+	    value: function componentDidMount() {
+	      if (document.getElementById("chat-box")) document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+	    }
+	  }, {
+	    key: 'onClick',
+	    value: function onClick(item, event) {
+	      console.log(item);
+	      $("div[id='" + item + "']").fadeOut();
+	    }
+	  }, {
+	    key: 'onKeyPress',
+	    value: function onKeyPress(event) {
+	      event.preventDefault();
+	      var index = event.target.id;
+	      console.log("Key");
+	      console.log(this.state.inputs[index]);
+	      console.log(this.state.keys[index]);
+	      var msg = this.state.inputs[index];
+	      var key = this.state.keys[index];
+	      var data = {};
+	      data['user'] = "";
+	      for (var user in this.props.value.room) {
+	        console.log(key);
+	        if (this.props.value.room[user] == key) {
+	          data['user'] = user;
+	          break;
+	        }
+	      }
+	      data['room'] = {};
+	      data['room'][data['user']] = key;
+	      data['value'] = this.state['username'] + ': ' + msg;
+	      data['name'] = this.state['username'];
+
+	      socket.emit('join-chat', data);
+	      window.setTimeout(function () {
+	        socket.emit('chat message', data);
+	      }, 200);
+	    }
+	  }, {
+	    key: 'onChange',
+	    value: function onChange(event) {
+	      var target = event.target;
+	      var value = target.value;
+	      var name = target.name;
+
+	      this.setState(function (prevs) {
+	        prevs.inputs[name] = value;
+	        prevs.keys[name] = target.id;
+	        return prevs;
+	      });
+	    }
+
+	    //ref={(input) => {this.input[key] = input; this.key[key] = key}}
+
+	  }, {
 	    key: 'render',
 	    value: function render() {
 	      var _this2 = this;
@@ -137,15 +212,15 @@
 	          'div',
 	          { className: 'row' },
 	          Object.keys(this.state).filter(function (x) {
-	            return x !== 'username';
-	          }).map(function (key) {
+	            return x !== 'username' && x != 'inputs' && x != 'keys';
+	          }).map(function (key, ind) {
 
 	            return _react2.default.createElement(
 	              'div',
-	              { className: 'col-md-4', key: key },
+	              { className: 'col-md-4', id: key, key: key },
 	              _react2.default.createElement(
 	                'div',
-	                { className: 'portlet portlet-default' },
+	                { className: 'portlet portlet-orange' },
 	                _react2.default.createElement(
 	                  'div',
 	                  { className: 'portlet-heading' },
@@ -153,10 +228,15 @@
 	                    'div',
 	                    { className: 'portlet-title' },
 	                    _react2.default.createElement(
-	                      'h4',
-	                      null,
-	                      _react2.default.createElement('i', { className: 'fa fa-circle text-green' }),
-	                      ' '
+	                      'button',
+	                      { type: 'button', className: 'close', 'aria-label': 'Close', onClick: function onClick() {
+	                          _this2.onClick(key);
+	                        } },
+	                      _react2.default.createElement(
+	                        'span',
+	                        { 'aria-hidden': 'true' },
+	                        '\xD7'
+	                      )
 	                    )
 	                  ),
 	                  _react2.default.createElement('div', { className: 'clearfix' })
@@ -169,22 +249,17 @@
 	                    null,
 	                    _react2.default.createElement(
 	                      'div',
-	                      { className: 'portlet-body chat-widget', style: { overflow: 'auto', width: 'auto', height: 300 + 'px' } },
+	                      { id: 'chat-box', className: 'portlet-body chat-widget', style: { overflow: 'auto', width: 'auto', height: 300 + 'px' } },
 	                      _this2.state[key].map(function (msg, index) {
 	                        return _react2.default.createElement(
 	                          'div',
-	                          { className: 'row' },
+	                          { className: 'row', key: index },
 	                          _react2.default.createElement(
 	                            'div',
 	                            { className: 'col-lg-12' },
 	                            _react2.default.createElement(
 	                              'div',
 	                              { className: 'media' },
-	                              _react2.default.createElement(
-	                                'a',
-	                                { className: 'pull-left', href: '#' },
-	                                _react2.default.createElement('img', { className: 'media-object img-circle', src: 'https://lorempixel.com/30/30/people/1/', alt: '' })
-	                              ),
 	                              _react2.default.createElement(
 	                                'div',
 	                                { className: 'media-body' },
@@ -205,6 +280,20 @@
 	                          _react2.default.createElement('hr', null)
 	                        );
 	                      })
+	                    )
+	                  ),
+	                  _react2.default.createElement(
+	                    'div',
+	                    { className: 'portlet-footer' },
+	                    _react2.default.createElement(
+	                      'form',
+	                      { id: ind, onSubmit: _this2.onKeyPress },
+	                      _react2.default.createElement(
+	                        'div',
+	                        { className: 'form-group text' },
+	                        _react2.default.createElement('input', { type: 'text', className: 'form-control text', placeholder: 'Enter message...', id: key, name: ind, value: _this2.state['inputs'][ind], onChange: _this2.onChange }),
+	                        _react2.default.createElement('input', { hidden: true, type: 'submit', value: 'Submit' })
+	                      )
 	                    )
 	                  )
 	                )
@@ -227,26 +316,34 @@
 
 	    var _this3 = _possibleConstructorReturn(this, (NameForm.__proto__ || Object.getPrototypeOf(NameForm)).call(this, props));
 
-	    _this3.state = { value: '', name: '', user: '', room: {}, registered: false, rooms: [] };
+	    _this3.state = { value: '', name: '', user: '', room: {}, registered: false, rooms: {} };
 
 	    _this3.handleChange = _this3.handleChange.bind(_this3);
 	    _this3.handleSubmit = _this3.handleSubmit.bind(_this3);
-	    socket.on('room-update', function (user) {
-	      if (!_this3.state.rooms.includes(user)) {
-	        _this3.state.rooms.push(user);
-	      }
-	    });
-	    socket.on('room-leave', function (user) {
-	      if (_this3.state.rooms.invludes(user)) {
-	        var index = _this3.state.rooms.includes.indexOf(user);
-	        _this3.state.rooms.splice(index, 1);
-	      }
+	    _this3.cookieupdate = _this3.cookieupdate.bind(_this3);
+	    socket.on('room-update', function (data) {
+	      //  if (!Object.keys(this.state.rooms).includes(data['name'])) {
+	      _this3.state.rooms[data['name']] = data['id'];
+
+	      // }
 	    });
 	    socket.emit('new-user');
 	    socket.on('get-room', function () {
-	      if (_this3.state.rooms.length != 0) {
+	      if (Object.keys(_this3.state.rooms).length != 0) {
 	        socket.emit('join', _this3.state);
 	      }
+	    });
+	    socket.on('leave-chat', function (data) {
+	      console.log("Leave");
+	      _this3.setState(function (prevs) {
+	        for (var key in prevs.rooms) {
+	          if (prevs.rooms[key] == data['id']) {
+	            delete prevs.rooms[key];
+	            break;
+	          }
+	        }
+	        return prevs;
+	      });
 	    });
 	    socket.on('are-you', function (data) {
 	      if (_this3.state.name == data.user) {
@@ -263,6 +360,26 @@
 	  }
 
 	  _createClass(NameForm, [{
+	    key: 'cookieupdate',
+	    value: function cookieupdate(data) {
+	      var _this4 = this;
+
+	      console.log("Cookie-Update");
+	      this.setState(function (prevs) {
+	        prevs.rooms[prevs.name] = data.rooms[prevs.name];
+	        for (var name in data.room) {
+	          console.log(name);
+	          console.log(data.room);
+	          console.log(prevs.room);
+	          prevs.room[name] = data.room[name];
+	        }
+	        //prev.room = data.room
+	        return prevs;
+	      }, function () {
+	        socket.emit('join', _this4.state);
+	      });
+	    }
+	  }, {
 	    key: 'handleChange',
 	    value: function handleChange(event) {
 	      if (event.target.name == "msg") this.setState({ value: event.target.value });else if (event.target.name == "name") this.setState({ name: event.target.value });else this.setState({ user: event.target.value });
@@ -270,24 +387,27 @@
 	  }, {
 	    key: 'handleSubmit',
 	    value: function handleSubmit(event) {
-	      var _this4 = this;
+	      var _this5 = this;
 
 	      event.preventDefault();
 	      if (this.state.registered == false) {
 	        if (this.state.value == "" && this.state.name != "" && this.state.user == "") {
 	          this.setState(function (prevs) {
 	            //prevs.room = prevs.name;
-	            prevs.rooms.push(prevs.name);
+	            prevs.rooms[prevs.name] = socket.id;
 	            prevs.registered = true;
 	            return prevs;
 	          }, function () {
-	            console.log(_this4.state);
-	            socket.emit('join', _this4.state);
+	            console.log(_this5.state);
+	            if (Cookies.get(_this5.state.name)) {
+	              var cookie = JSON.parse(Cookies.get(_this5.state.name));
+	              _this5.cookieupdate(cookie.s_data);
+	            } else socket.emit('join', _this5.state);
 	          });
 	        } else {
 	          alert("Resubmit");
 	        }
-	      } else if (this.state.room != "" && this.state.value != "") {
+	      } else if (this.state.user != "" && this.state.value != "") {
 
 	        alert('a msg was submitted in room ' + this.state.room);
 	        console.log(this.state.value);
@@ -300,10 +420,10 @@
 	          return prevs;
 	        }, function () {
 
-	          socket.emit('join-chat', _this4.state);
+	          socket.emit('join-chat', _this5.state);
 	          window.setTimeout(function () {
-	            socket.emit('chat message', _this4.state);
-	            _this4.setState({ value: '' });
+	            socket.emit('chat message', _this5.state);
+	            _this5.setState({ value: '' });
 	          }, 200);
 	        });
 	      }
@@ -327,64 +447,93 @@
 	  }, {
 	    key: 'render',
 	    value: function render() {
-	      var _this5 = this;
+	      var _this6 = this;
 
 	      return _react2.default.createElement(
 	        'div',
 	        null,
 	        _react2.default.createElement(
-	          'form',
-	          { onSubmit: this.handleSubmit },
+	          'nav',
+	          { className: 'navbar navbar-default' },
 	          _react2.default.createElement(
-	            'label',
-	            null,
-	            'Message:',
-	            _react2.default.createElement('input', { type: 'text', name: 'msg', value: this.state.value, onChange: this.handleChange })
-	          ),
-	          _react2.default.createElement(
-	            'label',
-	            null,
-	            'Name:',
-	            _react2.default.createElement('input', { type: 'text', name: 'name', value: this.state.name, onChange: this.handleChange, readOnly: this.state.registered })
-	          ),
-	          _react2.default.createElement(
-	            'label',
-	            null,
-	            'Room:',
+	            'div',
+	            { className: 'container-fluid' },
 	            _react2.default.createElement(
-	              'select',
-	              { value: this.state.user, onChange: this.handleChange },
+	              'div',
+	              { className: 'navbar-header' },
 	              _react2.default.createElement(
-	                'option',
-	                { hidden: true },
-	                ' '
-	              ),
-	              this.state.rooms.filter(function (x) {
-	                if (_this5.state.registered == true && x == _this5.state.name) {
-	                  return false;
-	                }return true;
-	              }).map(function (room, key) {
-	                return _react2.default.createElement(
-	                  'option',
-	                  { value: room, key: key },
-	                  ' ',
-	                  room,
-	                  ' '
-	                );
-	              })
+	                'form',
+	                { className: 'form-inline', onSubmit: this.handleSubmit },
+	                _react2.default.createElement(
+	                  'div',
+	                  { className: 'form-group' },
+	                  _react2.default.createElement(
+	                    'label',
+	                    null,
+	                    'Message:'
+	                  ),
+	                  _react2.default.createElement('input', { type: 'text', className: 'form-control', name: 'msg', value: this.state.value, onChange: this.handleChange, placeholder: 'Type Message' })
+	                ),
+	                _react2.default.createElement(
+	                  'div',
+	                  { className: 'form-group right-group' },
+	                  _react2.default.createElement('input', { type: 'text', className: 'form-control', name: 'name', value: this.state.name, onChange: this.handleChange, readOnly: this.state.registered, placeholder: 'Type Name' }),
+	                  _react2.default.createElement(
+	                    'label',
+	                    null,
+	                    'User:'
+	                  ),
+	                  _react2.default.createElement(
+	                    'select',
+	                    { value: this.state.user, onChange: this.handleChange, id: 'target', className: 'form-control', disabled: this.state.registered == false && true },
+	                    Object.keys(this.state.rooms).filter(function (x) {
+	                      if (_this6.state.registered == true && x == _this6.state.name) {
+	                        return false;
+	                      }return true;
+	                    }).map(function (room, key) {
+	                      return _react2.default.createElement(
+	                        'option',
+	                        { value: room, key: key },
+	                        ' ',
+	                        room,
+	                        ' '
+	                      );
+	                    }),
+	                    _react2.default.createElement(
+	                      'option',
+	                      { hidden: true, disabled: true },
+	                      ' '
+	                    )
+	                  ),
+	                  _react2.default.createElement(
+	                    'button',
+	                    { type: 'submit', className: 'btn btn-default', value: 'Submit' },
+	                    this.state.registered == true && _react2.default.createElement(
+	                      'div',
+	                      null,
+	                      '  Start/Continue Conversation! '
+	                    ),
+	                    this.state.registered == false && _react2.default.createElement(
+	                      'div',
+	                      null,
+	                      ' Register your Name '
+	                    )
+	                  )
+	                )
+	              )
 	            )
-	          ),
-	          _react2.default.createElement('input', { type: 'submit', value: 'Submit' })
+	          )
 	        ),
-	        this.state.registered == true && _react2.default.createElement(
+	        _react2.default.createElement(
 	          'div',
 	          null,
 	          _react2.default.createElement(
 	            'h1',
 	            null,
-	            ' Chats '
+	            ' Chat Server '
 	          ),
-	          _react2.default.createElement(Messages, { value: this.state.name })
+	          _react2.default.createElement('hr', null),
+	          this.state.registered == true && _react2.default.createElement(Messages, { value: this.state, callback: this.cookieupdate })
 	        )
 	      );
 	    }

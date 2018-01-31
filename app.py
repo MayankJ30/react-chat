@@ -5,7 +5,7 @@ from flask_socketio import SocketIO, emit, send, join_room, leave_room
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 app.secret_key = 'A0Zr98j/3yX R~XHH!jmN]LWX/,?RT'
-socketio = SocketIO(app, manage_session=False, ping_timeout = 3, ping_interval = 2)
+socketio = SocketIO(app, manage_session=False, ping_timeout = 9, ping_interval = 3)
 
 @app.route('/')
 def hello():
@@ -18,10 +18,13 @@ def test_connect():
     id = request.sid
     print("Connected: %s" % (id))
     sys.stdout.flush()
-    @socketio.on('disconnect')
-    def test_disconnect():
-        print('Client disconnected')
-        sys.stdout.flush()
+
+@socketio.on('disconnect')
+def test_disconnect():
+    id = request.sid
+    emit('leave-chat' , {'id': id}, broadcast=True)
+    print('Client disconnected %s' % (id))
+    sys.stdout.flush()
 
 
 
@@ -55,7 +58,7 @@ def on_join(data):
     print("user: " + user)
     #session[room]= []
     sys.stdout.flush()
-    emit('room-update', user, broadcast=True);
+    emit('room-update', {'name' : user, 'id': request.sid}, broadcast=True);
     #send('entered the room.', room=room)
 
 
@@ -75,15 +78,7 @@ def on_join_room(data):
     sys.stdout.flush();
     join_room(data);
 
-@socketio.on('leave')
-def on_leave(data):
-    #username = data['username']
-    rooms = data['room']
-    for key in rooms:
-        leave_room(rooms[key])
-    print(' left rooms.')
-    sys.stdout.flush()
-    emit('room-leave', data['user'], broadcast=True)
+
 
 
 @socketio.on('new-user')
